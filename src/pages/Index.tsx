@@ -180,13 +180,13 @@ const Index = () => {
                   <img 
                     src={siteSettings.general.logoUrl} 
                     alt="SPACE Logo" 
-                    className="h-24 w-auto"
+                    className="h-40 w-auto"
                   />
                 ) : (
                   <img 
                     src="./images/space_logo_20260101_120021.png" 
                     alt="SPACE Logo" 
-                    className="h-24 w-auto"
+                    className="h-40 w-auto"
                   />
                 );
               })()}
@@ -496,13 +496,13 @@ const Index = () => {
                   <img 
                     src={siteSettings.general.logoUrl} 
                     alt="SPACE Logo" 
-                    className="h-16 w-auto filter brightness-0 invert"
+                    className="h-28 w-auto filter brightness-0 invert"
                   />
                 ) : (
                   <img 
                     src="./images/space_logo_20260101_120021.png" 
                     alt="SPACE Logo" 
-                    className="h-16 w-auto filter brightness-0 invert"
+                    className="h-28 w-auto filter brightness-0 invert"
                   />
                 )}
               </div>
