@@ -29,10 +29,12 @@ import {
   LogOut,
   Shield,
   Crown,
-  User
+  User,
+  Github
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import GitHubIntegration from '@/components/GitHubIntegration';
 
 interface AdminUser {
   id: string;
@@ -778,7 +780,7 @@ const AdminDashboard = () => {
 
       <div className="container mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="users" className="flex items-center space-x-2">
               <Users className="w-4 h-4" />
               <span>Users</span>
@@ -802,6 +804,10 @@ const AdminDashboard = () => {
             <TabsTrigger value="logo" className="flex items-center space-x-2">
               <Image className="w-4 h-4" />
               <span>Logo</span>
+            </TabsTrigger>
+            <TabsTrigger value="github" className="flex items-center space-x-2">
+              <Github className="w-4 h-4" />
+              <span>GitHub</span>
             </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center space-x-2">
               <History className="w-4 h-4" />
@@ -1422,6 +1428,11 @@ const AdminDashboard = () => {
                 </CardContent>
               </Card>
             ))}
+          </TabsContent>
+
+          {/* GitHub Integration */}
+          <TabsContent value="github" className="space-y-8">
+            <GitHubIntegration />
           </TabsContent>
 
           {/* Content History */}
