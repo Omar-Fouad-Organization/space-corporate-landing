@@ -3,10 +3,65 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ExternalLink, Calendar, Users, MapPin, Award, ArrowRight, Menu, X } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('home');
+  const [contentData, setContentData] = useState<any>({});
+  const [siteSettings, setSiteSettings] = useState<any>({});
+  const [loading, setLoading] = useState(true);
+  
+  // Load content from database
+  useEffect(() => {
+    loadContent();
+  }, []);
+
+  const loadContent = async () => {
+    try {
+      // Load content sections
+      const { data: content } = await supabase
+        .from('content_sections_2026_01_01_12_00')
+        .select('*')
+        .eq('is_published', true);
+      
+      if (content) {
+        const contentMap: any = {};
+        content.forEach(section => {
+          contentMap[section.section_key] = section.content;
+        });
+        setContentData(contentMap);
+      }
+
+      // Load site settings
+      const { data: settings } = await supabase
+        .from('site_settings_2026_01_01_12_00')
+        .select('*');
+      
+      if (settings) {
+        const settingsMap: any = {};
+        settings.forEach(setting => {
+          settingsMap[setting.setting_key] = setting.setting_value;
+        });
+        setSiteSettings(settingsMap);
+      }
+
+    } catch (error) {
+      console.error('Error loading content:', error);
+      // Fallback to default content if database fails
+      setContentData({
+        hero: {
+          title: "We Create the Space for Impact",
+          subtitle: "Exhibitions Built with Precision and Scale",
+          description: "We transform concepts into powerful experiences that drive business results and create lasting connections.",
+          ctaPrimary: "Start Your Event",
+          ctaSecondary: "View Our Work"
+        }
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Smooth scroll to section
   const scrollToSection = (sectionId: string) => {
@@ -90,6 +145,17 @@ const Index = () => {
       description: "Interactive exhibition showcasing latest marketing technologies."
     }
   ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading SPACE...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -189,11 +255,10 @@ const Index = () => {
             <div className="space-y-8">
               <div className="space-y-6">
                 <h1 className="heading-hero text-foreground">
-                  We Create the
-                  <span className="text-primary block">Space for Impact</span>
+                  {contentData.hero?.title || "We Create the Space for Impact"}
                 </h1>
                 <p className="text-corporate max-w-lg">
-                  Exhibitions built with precision and scale. We transform concepts into powerful experiences that drive business results and create lasting connections.
+                  {contentData.hero?.description || "Exhibitions built with precision and scale. We transform concepts into powerful experiences that drive business results and create lasting connections."}
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row gap-4">
@@ -201,7 +266,7 @@ const Index = () => {
                   onClick={() => scrollToSection('contact')}
                   className="btn-corporate px-8 py-6 text-lg"
                 >
-                  Start Your Event
+                  {contentData.hero?.ctaPrimary || "Start Your Event"}
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Button>
                 <Button 
