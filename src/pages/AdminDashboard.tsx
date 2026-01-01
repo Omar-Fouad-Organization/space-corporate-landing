@@ -99,6 +99,9 @@ const AdminDashboard = () => {
   const [editingContent, setEditingContent] = useState<any>(null);
   const [isEditContentDialogOpen, setIsEditContentDialogOpen] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [editingMedia, setEditingMedia] = useState<MediaAsset | null>(null);
+  const [isEditMediaDialogOpen, setIsEditMediaDialogOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   // Check authentication and load user data
   useEffect(() => {
@@ -483,6 +486,129 @@ const AdminDashboard = () => {
     }
   };
 
+  // Media editing functions
+  const openMediaEditor = (asset: MediaAsset) => {
+    setEditingMedia(asset);
+    setIsEditMediaDialogOpen(true);
+  };
+
+  const saveMediaChanges = async () => {
+    if (!editingMedia) return;
+
+    try {
+      const { error } = await supabase
+        .from('media_assets_2026_01_01_12_00')
+        .update({
+          file_name: editingMedia.file_name,
+          alt_text: editingMedia.alt_text,
+          category: editingMedia.category
+        })
+        .eq('id', editingMedia.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Media Updated",
+        description: "Media information has been updated successfully.",
+      });
+
+      setIsEditMediaDialogOpen(false);
+      setEditingMedia(null);
+      await loadData();
+    } catch (error: any) {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update media.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const replaceMediaFile = async (newFile: File, assetId: string) => {
+    setUploadingFile(true);
+    try {
+      const fileExt = newFile.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `replacements/${fileName}`;
+
+      // Upload new file to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('space-media')
+        .upload(filePath, newFile);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('space-media')
+        .getPublicUrl(filePath);
+
+      // Update media asset record
+      const { error: updateError } = await supabase
+        .from('media_assets_2026_01_01_12_00')
+        .update({
+          file_name: newFile.name,
+          file_path: publicUrl,
+          file_type: newFile.type,
+          file_size: newFile.size
+        })
+        .eq('id', assetId);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "File Replaced",
+        description: "Media file has been replaced successfully.",
+      });
+
+      await loadData();
+    } catch (error: any) {
+      toast({
+        title: "Replace Failed",
+        description: error.message || "Failed to replace file.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const deleteMediaAsset = async (assetId: string, fileName: string) => {
+    try {
+      const { error } = await supabase
+        .from('media_assets_2026_01_01_12_00')
+        .update({ is_active: false })
+        .eq('id', assetId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Media Deleted",
+        description: `${fileName} has been removed.`,
+      });
+
+      await loadData();
+    } catch (error: any) {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete media.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getFilteredMedia = () => {
+    if (selectedCategory === 'all') {
+      return mediaAssets;
+    }
+    return mediaAssets.filter(asset => asset.category === selectedCategory);
+  };
+
+  const getUniqueCategories = () => {
+    const categories = ['all', ...new Set(mediaAssets.map(asset => asset.category))];
+    return categories;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -772,7 +898,12 @@ const AdminDashboard = () => {
           {/* Media Management */}
           <TabsContent value="media" className="space-y-8">
             <div className="flex items-center justify-between">
-              <h2 className="text-3xl font-heading font-bold">Media Management</h2>
+              <div>
+                <h2 className="text-3xl font-heading font-bold">Media Management</h2>
+                <p className="text-muted-foreground mt-1">
+                  Manage all website images, logos, and media files
+                </p>
+              </div>
               <div className="flex space-x-2">
                 <input
                   type="file"
@@ -817,8 +948,28 @@ const AdminDashboard = () => {
               </div>
             </div>
 
+            {/* Category Filter */}
+            <div className="flex items-center space-x-4">
+              <Label>Filter by Category:</Label>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {getUniqueCategories().map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category === 'all' ? 'All Categories' : category.charAt(0).toUpperCase() + category.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Badge variant="outline">
+                {getFilteredMedia().length} files
+              </Badge>
+            </div>
+
             <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {mediaAssets.map((asset) => (
+              {getFilteredMedia().map((asset) => (
                 <Card key={asset.id}>
                   <CardContent className="p-4">
                     <div className="aspect-square bg-muted rounded-lg mb-4 flex items-center justify-center">
@@ -832,34 +983,62 @@ const AdminDashboard = () => {
                         <Image className="w-8 h-8 text-muted-foreground" />
                       )}
                     </div>
-                    <h4 className="font-semibold text-sm truncate">{asset.file_name}</h4>
-                    <p className="text-xs text-muted-foreground">
-                      {(asset.file_size / 1024).toFixed(1)} KB
-                    </p>
-                    <div className="flex justify-between items-center mt-2">
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-sm truncate" title={asset.file_name}>
+                        {asset.file_name}
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        {(asset.file_size / 1024).toFixed(1)} KB • {asset.file_type}
+                      </p>
+                      {asset.alt_text && (
+                        <p className="text-xs text-muted-foreground italic truncate" title={asset.alt_text}>
+                          {asset.alt_text}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center mt-3">
                       <Badge variant="outline" className="text-xs">
                         {asset.category}
                       </Badge>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={async () => {
-                          const { error } = await supabase
-                            .from('media_assets_2026_01_01_12_00')
-                            .update({ is_active: false })
-                            .eq('id', asset.id);
-                          
-                          if (!error) {
-                            toast({
-                              title: "Media Deleted",
-                              description: "Media file has been removed.",
-                            });
-                            await loadData();
-                          }
-                        }}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
+                      <div className="flex space-x-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openMediaEditor(asset)}
+                          title="Edit media info"
+                        >
+                          <Edit className="w-3 h-3" />
+                        </Button>
+                        <input
+                          type="file"
+                          id={`replace-${asset.id}`}
+                          className="hidden"
+                          accept={asset.file_type.startsWith('image/') ? 'image/*' : '*'}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              replaceMediaFile(file, asset.id);
+                            }
+                          }}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => document.getElementById(`replace-${asset.id}`)?.click()}
+                          disabled={uploadingFile}
+                          title="Replace file"
+                        >
+                          <Upload className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => deleteMediaAsset(asset.id, asset.file_name)}
+                          title="Delete media"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -1045,6 +1224,112 @@ const AdminDashboard = () => {
                 Cancel
               </Button>
               <Button onClick={saveContentChanges} className="btn-corporate">
+                <Save className="w-4 h-4 mr-2" />
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Media Editor Dialog */}
+      <Dialog open={isEditMediaDialogOpen} onOpenChange={setIsEditMediaDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Media: {editingMedia?.file_name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {editingMedia && (
+              <>
+                <div className="aspect-video bg-muted rounded-lg flex items-center justify-center mb-4">
+                  {editingMedia.file_type.startsWith('image/') ? (
+                    <img 
+                      src={editingMedia.file_path} 
+                      alt={editingMedia.alt_text || editingMedia.file_name}
+                      className="max-w-full max-h-full object-contain rounded-lg"
+                    />
+                  ) : (
+                    <div className="text-center">
+                      <Image className="w-16 h-16 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">{editingMedia.file_type}</p>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>File Name</Label>
+                    <Input
+                      value={editingMedia.file_name}
+                      onChange={(e) => setEditingMedia({
+                        ...editingMedia,
+                        file_name: e.target.value
+                      })}
+                      placeholder="Enter file name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Category</Label>
+                    <Select 
+                      value={editingMedia.category} 
+                      onValueChange={(value) => setEditingMedia({
+                        ...editingMedia,
+                        category: value
+                      })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="logos">Logos</SelectItem>
+                        <SelectItem value="backgrounds">Backgrounds</SelectItem>
+                        <SelectItem value="exhibitions">Exhibitions</SelectItem>
+                        <SelectItem value="conferences">Conferences</SelectItem>
+                        <SelectItem value="business">Business</SelectItem>
+                        <SelectItem value="planning">Planning</SelectItem>
+                        <SelectItem value="office">Office</SelectItem>
+                        <SelectItem value="graphics">Graphics</SelectItem>
+                        <SelectItem value="general">General</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Alt Text / Description</Label>
+                  <Textarea
+                    value={editingMedia.alt_text || ''}
+                    onChange={(e) => setEditingMedia({
+                      ...editingMedia,
+                      alt_text: e.target.value
+                    })}
+                    placeholder="Enter description for accessibility and SEO"
+                    rows={3}
+                  />
+                </div>
+                
+                <div className="grid grid-cols-3 gap-4 text-sm text-muted-foreground">
+                  <div>
+                    <strong>File Size:</strong><br />
+                    {(editingMedia.file_size / 1024).toFixed(1)} KB
+                  </div>
+                  <div>
+                    <strong>File Type:</strong><br />
+                    {editingMedia.file_type}
+                  </div>
+                  <div>
+                    <strong>Uploaded:</strong><br />
+                    {new Date(editingMedia.created_at).toLocaleDateString()}
+                  </div>
+                </div>
+              </>
+            )}
+            
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setIsEditMediaDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={saveMediaChanges} className="btn-corporate">
                 <Save className="w-4 h-4 mr-2" />
                 Save Changes
               </Button>
