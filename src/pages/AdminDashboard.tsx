@@ -102,6 +102,8 @@ const AdminDashboard = () => {
   const [editingMedia, setEditingMedia] = useState<MediaAsset | null>(null);
   const [isEditMediaDialogOpen, setIsEditMediaDialogOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [isLogoManagementOpen, setIsLogoManagementOpen] = useState(false);
+  const [currentLogo, setCurrentLogo] = useState<string>('');
 
   // Check authentication and load user data
   useEffect(() => {
@@ -460,11 +462,11 @@ const AdminDashboard = () => {
     }
   };
 
-  // Simple content editor
+  // User-friendly content editor
   const openContentEditor = (section: ContentSection) => {
     setEditingContent({
       ...section,
-      contentString: JSON.stringify(section.content, null, 2)
+      formData: { ...section.content }
     });
     setIsEditContentDialogOpen(true);
   };
@@ -473,8 +475,7 @@ const AdminDashboard = () => {
     if (!editingContent) return;
 
     try {
-      const parsedContent = JSON.parse(editingContent.contentString);
-      await updateContent(editingContent.section_key, parsedContent);
+      await updateContent(editingContent.section_key, editingContent.formData);
       setIsEditContentDialogOpen(false);
       setEditingContent(null);
     } catch (error: any) {
@@ -483,6 +484,87 @@ const AdminDashboard = () => {
         description: "Please check your JSON syntax and try again.",
         variant: "destructive",
       });
+    }
+  };
+
+  // User-friendly form update functions
+  const updateFormField = (field: string, value: any) => {
+    setEditingContent({
+      ...editingContent,
+      formData: {
+        ...editingContent.formData,
+        [field]: value
+      }
+    });
+  };
+
+  const updateNestedField = (parentField: string, childField: string, value: any) => {
+    setEditingContent({
+      ...editingContent,
+      formData: {
+        ...editingContent.formData,
+        [parentField]: {
+          ...editingContent.formData[parentField],
+          [childField]: value
+        }
+      }
+    });
+  };
+
+  const updateArrayItem = (arrayField: string, index: number, field: string, value: any) => {
+    const updatedArray = [...editingContent.formData[arrayField]];
+    updatedArray[index] = {
+      ...updatedArray[index],
+      [field]: value
+    };
+    setEditingContent({
+      ...editingContent,
+      formData: {
+        ...editingContent.formData,
+        [arrayField]: updatedArray
+      }
+    });
+  };
+
+  // Logo management functions
+  const openLogoManagement = async () => {
+    const logoSetting = siteSettings.find(s => s.setting_key === 'general');
+    if (logoSetting) {
+      setCurrentLogo(logoSetting.setting_value.logoUrl || '');
+    }
+    setIsLogoManagementOpen(true);
+  };
+
+  const updateLogo = async (newLogoUrl: string) => {
+    try {
+      const generalSettings = siteSettings.find(s => s.setting_key === 'general');
+      if (generalSettings) {
+        const updatedSettings = {
+          ...generalSettings.setting_value,
+          logoUrl: newLogoUrl,
+          logoWhiteUrl: newLogoUrl
+        };
+        await updateSiteSettings('general', updatedSettings);
+        setCurrentLogo(newLogoUrl);
+        
+        toast({
+          title: "Logo Updated",
+          description: "Website logo has been updated successfully.",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update logo.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const uploadNewLogo = async (file: File) => {
+    const logoAsset = await handleFileUpload(file, 'logos');
+    if (logoAsset) {
+      await updateLogo(logoAsset.file_path);
     }
   };
 
@@ -661,7 +743,7 @@ const AdminDashboard = () => {
 
       <div className="container mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="users" className="flex items-center space-x-2">
               <Users className="w-4 h-4" />
               <span>Users</span>
@@ -681,6 +763,10 @@ const AdminDashboard = () => {
             <TabsTrigger value="seo" className="flex items-center space-x-2">
               <Globe className="w-4 h-4" />
               <span>SEO</span>
+            </TabsTrigger>
+            <TabsTrigger value="logo" className="flex items-center space-x-2">
+              <Image className="w-4 h-4" />
+              <span>Logo</span>
             </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center space-x-2">
               <History className="w-4 h-4" />
@@ -830,7 +916,12 @@ const AdminDashboard = () => {
           {/* Content Management */}
           <TabsContent value="content" className="space-y-8">
             <div className="flex items-center justify-between">
-              <h2 className="text-3xl font-heading font-bold">Content Management</h2>
+              <div>
+                <h2 className="text-3xl font-heading font-bold">Content Management</h2>
+                <p className="text-muted-foreground mt-1">
+                  Edit website content with user-friendly forms
+                </p>
+              </div>
               <Button onClick={() => loadData()} variant="outline">
                 <Save className="w-4 h-4 mr-2" />
                 Refresh Content
@@ -849,10 +940,22 @@ const AdminDashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="bg-muted p-4 rounded-lg">
-                      <pre className="text-sm overflow-auto max-h-40">
-                        {JSON.stringify(section.content, null, 2)}
-                      </pre>
+                    <div className="space-y-3">
+                      <div className="text-sm text-muted-foreground">
+                        <strong>Section:</strong> {section.section_key}
+                      </div>
+                      {/* Preview key fields */}
+                      <div className="bg-muted p-4 rounded-lg space-y-2">
+                        {section.content.title && (
+                          <div><strong>Title:</strong> {section.content.title}</div>
+                        )}
+                        {section.content.description && (
+                          <div><strong>Description:</strong> {section.content.description.substring(0, 100)}...</div>
+                        )}
+                        {section.content.items && (
+                          <div><strong>Items:</strong> {section.content.items.length} items</div>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-muted-foreground">
@@ -1119,6 +1222,121 @@ const AdminDashboard = () => {
             </div>
           </TabsContent>
 
+          {/* Logo Management */}
+          <TabsContent value="logo" className="space-y-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-3xl font-heading font-bold">Logo Management</h2>
+                <p className="text-muted-foreground mt-1">
+                  Manage website logo for header and footer
+                </p>
+              </div>
+              <Button onClick={openLogoManagement} className="btn-corporate">
+                <Settings className="w-4 h-4 mr-2" />
+                Manage Logo
+              </Button>
+            </div>
+
+            <div className="grid gap-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Current Logo</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="flex items-center space-x-6">
+                    <div className="w-32 h-32 bg-muted rounded-lg flex items-center justify-center border-2 border-dashed border-border">
+                      {currentLogo ? (
+                        <img 
+                          src={currentLogo} 
+                          alt="Current Logo" 
+                          className="max-w-full max-h-full object-contain"
+                        />
+                      ) : (
+                        <div className="text-center">
+                          <Image className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                          <p className="text-sm text-muted-foreground">No logo set</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-semibold mb-2">Logo Actions</h3>
+                        <div className="flex space-x-2">
+                          <input
+                            type="file"
+                            id="new-logo-upload"
+                            className="hidden"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                uploadNewLogo(file);
+                              }
+                            }}
+                          />
+                          <Button 
+                            onClick={() => document.getElementById('new-logo-upload')?.click()}
+                            disabled={uploadingFile}
+                            className="btn-corporate"
+                          >
+                            <Upload className="w-4 h-4 mr-2" />
+                            {uploadingFile ? 'Uploading...' : 'Upload New Logo'}
+                          </Button>
+                          <Button 
+                            variant="outline"
+                            onClick={openLogoManagement}
+                          >
+                            <Edit className="w-4 h-4 mr-2" />
+                            Choose from Media
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        <p><strong>Recommended:</strong> PNG or SVG format</p>
+                        <p><strong>Size:</strong> 200x60px or similar ratio</p>
+                        <p><strong>Background:</strong> Transparent preferred</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Logo Usage</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <h4 className="font-semibold">Header Logo</h4>
+                      <div className="bg-muted p-4 rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          {currentLogo && (
+                            <img src={currentLogo} alt="Header Logo" className="h-8 w-auto" />
+                          )}
+                          <span className="font-heading font-black uppercase tracking-wider">SPACE</span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">Logo appears in the website header navigation</p>
+                    </div>
+                    <div className="space-y-4">
+                      <h4 className="font-semibold">Footer Logo</h4>
+                      <div className="bg-secondary p-4 rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          {currentLogo && (
+                            <img src={currentLogo} alt="Footer Logo" className="h-6 w-auto filter brightness-0 invert" />
+                          )}
+                          <span className="font-heading font-black uppercase tracking-wider text-white">SPACE</span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">Logo appears in the website footer (inverted for dark background)</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
           {/* SEO Settings */}
           <TabsContent value="seo" className="space-y-8">
             <div className="flex items-center justify-between">
@@ -1201,24 +1419,305 @@ const AdminDashboard = () => {
           <DialogHeader>
             <DialogTitle>Edit Content: {editingContent?.section_name}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Content (JSON Format)</Label>
-              <Textarea
-                value={editingContent?.contentString || ''}
-                onChange={(e) => setEditingContent({
-                  ...editingContent,
-                  contentString: e.target.value
-                })}
-                rows={20}
-                className="font-mono text-sm"
-                placeholder="Enter content in JSON format..."
-              />
-            </div>
-            <div className="text-sm text-muted-foreground">
-              <p><strong>Tip:</strong> Edit the JSON content above. Make sure to maintain valid JSON syntax.</p>
-              <p><strong>Common fields:</strong> title, description, subtitle, items (for lists), etc.</p>
-            </div>
+          <div className="space-y-6">
+            {editingContent && (
+              <>
+                {/* Hero Section Form */}
+                {editingContent.section_key === 'hero' && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Main Title</Label>
+                      <Input
+                        value={editingContent.formData?.title || ''}
+                        onChange={(e) => updateFormField('title', e.target.value)}
+                        placeholder="Enter main title"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Subtitle</Label>
+                      <Input
+                        value={editingContent.formData?.subtitle || ''}
+                        onChange={(e) => updateFormField('subtitle', e.target.value)}
+                        placeholder="Enter subtitle"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Textarea
+                        value={editingContent.formData?.description || ''}
+                        onChange={(e) => updateFormField('description', e.target.value)}
+                        placeholder="Enter description"
+                        rows={3}
+                      />
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Primary Button Text</Label>
+                        <Input
+                          value={editingContent.formData?.ctaPrimary || ''}
+                          onChange={(e) => updateFormField('ctaPrimary', e.target.value)}
+                          placeholder="Primary button text"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Secondary Button Text</Label>
+                        <Input
+                          value={editingContent.formData?.ctaSecondary || ''}
+                          onChange={(e) => updateFormField('ctaSecondary', e.target.value)}
+                          placeholder="Secondary button text"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* About Section Form */}
+                {editingContent.section_key === 'about' && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Section Title</Label>
+                      <Input
+                        value={editingContent.formData?.title || ''}
+                        onChange={(e) => updateFormField('title', e.target.value)}
+                        placeholder="Enter section title"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Main Description</Label>
+                      <Textarea
+                        value={editingContent.formData?.description || ''}
+                        onChange={(e) => updateFormField('description', e.target.value)}
+                        placeholder="Enter main description"
+                        rows={4}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Subtitle</Label>
+                      <Textarea
+                        value={editingContent.formData?.subtitle || ''}
+                        onChange={(e) => updateFormField('subtitle', e.target.value)}
+                        placeholder="Enter subtitle"
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Services Section Form */}
+                {editingContent.section_key === 'services' && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Section Title</Label>
+                      <Input
+                        value={editingContent.formData?.title || ''}
+                        onChange={(e) => updateFormField('title', e.target.value)}
+                        placeholder="Enter section title"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Section Description</Label>
+                      <Textarea
+                        value={editingContent.formData?.description || ''}
+                        onChange={(e) => updateFormField('description', e.target.value)}
+                        placeholder="Enter section description"
+                        rows={2}
+                      />
+                    </div>
+                    <div className="space-y-4">
+                      <Label>Service Items</Label>
+                      {editingContent.formData?.items?.map((item: any, index: number) => (
+                        <Card key={index} className="p-4">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-semibold">Service {index + 1}</h4>
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Service Title</Label>
+                                <Input
+                                  value={item.title || ''}
+                                  onChange={(e) => updateArrayItem('items', index, 'title', e.target.value)}
+                                  placeholder="Service title"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Icon (Emoji)</Label>
+                                <Input
+                                  value={item.icon || ''}
+                                  onChange={(e) => updateArrayItem('items', index, 'icon', e.target.value)}
+                                  placeholder="🏢"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Service Description</Label>
+                              <Textarea
+                                value={item.description || ''}
+                                onChange={(e) => updateArrayItem('items', index, 'description', e.target.value)}
+                                placeholder="Service description"
+                                rows={2}
+                              />
+                            </div>
+                          </div>
+                        </Card>
+                      )) || []}
+                    </div>
+                  </div>
+                )}
+
+                {/* Contact Section Form */}
+                {editingContent.section_key === 'contact' && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Section Title</Label>
+                      <Input
+                        value={editingContent.formData?.title || ''}
+                        onChange={(e) => updateFormField('title', e.target.value)}
+                        placeholder="Enter section title"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Textarea
+                        value={editingContent.formData?.description || ''}
+                        onChange={(e) => updateFormField('description', e.target.value)}
+                        placeholder="Enter description"
+                        rows={3}
+                      />
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Primary Button Text</Label>
+                        <Input
+                          value={editingContent.formData?.ctaPrimary || ''}
+                          onChange={(e) => updateFormField('ctaPrimary', e.target.value)}
+                          placeholder="Primary button text"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Secondary Button Text</Label>
+                        <Input
+                          value={editingContent.formData?.ctaSecondary || ''}
+                          onChange={(e) => updateFormField('ctaSecondary', e.target.value)}
+                          placeholder="Secondary button text"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer Section Form */}
+                {editingContent.section_key === 'footer' && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Company Description</Label>
+                      <Textarea
+                        value={editingContent.formData?.description || ''}
+                        onChange={(e) => updateFormField('description', e.target.value)}
+                        placeholder="Enter company description"
+                        rows={2}
+                      />
+                    </div>
+                    <div className="space-y-4">
+                      <Label>Contact Information</Label>
+                      <div className="grid md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label>Email</Label>
+                          <Input
+                            value={editingContent.formData?.contact?.email || ''}
+                            onChange={(e) => updateNestedField('contact', 'email', e.target.value)}
+                            placeholder="Email address"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Phone</Label>
+                          <Input
+                            value={editingContent.formData?.contact?.phone || ''}
+                            onChange={(e) => updateNestedField('contact', 'phone', e.target.value)}
+                            placeholder="Phone number"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Address</Label>
+                          <Input
+                            value={editingContent.formData?.contact?.address || ''}
+                            onChange={(e) => updateNestedField('contact', 'address', e.target.value)}
+                            placeholder="Address"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Green Life Expo Section Form */}
+                {editingContent.section_key === 'green_life_expo' && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Project Title</Label>
+                      <Input
+                        value={editingContent.formData?.title || ''}
+                        onChange={(e) => updateFormField('title', e.target.value)}
+                        placeholder="Enter project title"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Subtitle</Label>
+                      <Input
+                        value={editingContent.formData?.subtitle || ''}
+                        onChange={(e) => updateFormField('subtitle', e.target.value)}
+                        placeholder="Enter subtitle"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Textarea
+                        value={editingContent.formData?.description || ''}
+                        onChange={(e) => updateFormField('description', e.target.value)}
+                        placeholder="Enter description"
+                        rows={3}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Website URL</Label>
+                      <Input
+                        value={editingContent.formData?.url || ''}
+                        onChange={(e) => updateFormField('url', e.target.value)}
+                        placeholder="https://greenlife-expo.com"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Generic form for other sections */}
+                {!['hero', 'about', 'services', 'contact', 'footer', 'green_life_expo'].includes(editingContent.section_key) && (
+                  <div className="space-y-4">
+                    <div className="bg-muted p-4 rounded-lg">
+                      <p className="text-sm text-muted-foreground mb-2">
+                        <strong>Advanced Editing:</strong> This section uses a custom structure.
+                      </p>
+                      <Textarea
+                        value={JSON.stringify(editingContent.formData, null, 2)}
+                        onChange={(e) => {
+                          try {
+                            const parsed = JSON.parse(e.target.value);
+                            setEditingContent({
+                              ...editingContent,
+                              formData: parsed
+                            });
+                          } catch (error) {
+                            // Invalid JSON, don't update
+                          }
+                        }}
+                        rows={15}
+                        className="font-mono text-sm"
+                        placeholder="JSON content..."
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
             <div className="flex justify-end space-x-2">
               <Button variant="outline" onClick={() => setIsEditContentDialogOpen(false)}>
                 Cancel
@@ -1332,6 +1831,80 @@ const AdminDashboard = () => {
               <Button onClick={saveMediaChanges} className="btn-corporate">
                 <Save className="w-4 h-4 mr-2" />
                 Save Changes
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Logo Selection Dialog */}
+      <Dialog open={isLogoManagementOpen} onOpenChange={setIsLogoManagementOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Choose Logo from Media Library</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {mediaAssets
+                .filter(asset => asset.category === 'logos' || asset.file_type.startsWith('image/'))
+                .map((asset) => (
+                <Card 
+                  key={asset.id} 
+                  className={`cursor-pointer transition-all hover:ring-2 hover:ring-primary ${
+                    currentLogo === asset.file_path ? 'ring-2 ring-primary bg-primary/5' : ''
+                  }`}
+                  onClick={() => setCurrentLogo(asset.file_path)}
+                >
+                  <CardContent className="p-3">
+                    <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center">
+                      <img 
+                        src={asset.file_path} 
+                        alt={asset.alt_text || asset.file_name}
+                        className="max-w-full max-h-full object-contain"
+                      />
+                    </div>
+                    <p className="text-xs text-center truncate" title={asset.file_name}>
+                      {asset.file_name}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            
+            {currentLogo && (
+              <div className="border-t pt-4">
+                <div className="flex items-center space-x-4">
+                  <div className="w-20 h-20 bg-muted rounded-lg flex items-center justify-center">
+                    <img 
+                      src={currentLogo} 
+                      alt="Selected Logo" 
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  </div>
+                  <div>
+                    <p className="font-semibold">Selected Logo</p>
+                    <p className="text-sm text-muted-foreground">{currentLogo}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setIsLogoManagementOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => {
+                  if (currentLogo) {
+                    updateLogo(currentLogo);
+                    setIsLogoManagementOpen(false);
+                  }
+                }} 
+                className="btn-corporate"
+                disabled={!currentLogo}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Set as Logo
               </Button>
             </div>
           </div>
