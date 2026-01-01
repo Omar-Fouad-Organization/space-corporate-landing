@@ -187,7 +187,14 @@ const AdminDashboard = () => {
         .from('site_settings_2026_01_01_12_00')
         .select('*');
       
-      if (settings) setSiteSettings(settings);
+      if (settings) {
+        setSiteSettings(settings);
+        // Initialize current logo
+        const generalSetting = settings.find(s => s.setting_key === 'general');
+        if (generalSetting && generalSetting.setting_value && generalSetting.setting_value.logoUrl) {
+          setCurrentLogo(generalSetting.setting_value.logoUrl);
+        }
+      }
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -476,12 +483,19 @@ const AdminDashboard = () => {
 
     try {
       await updateContent(editingContent.section_key, editingContent.formData);
+      
+      toast({
+        title: "Content Updated",
+        description: `${editingContent.section_name} has been updated successfully.`,
+      });
+      
       setIsEditContentDialogOpen(false);
       setEditingContent(null);
+      await loadData(); // Refresh data
     } catch (error: any) {
       toast({
-        title: "Invalid JSON",
-        description: "Please check your JSON syntax and try again.",
+        title: "Save Failed",
+        description: error.message || "Failed to save content changes.",
         variant: "destructive",
       });
     }
@@ -528,30 +542,45 @@ const AdminDashboard = () => {
 
   // Logo management functions
   const openLogoManagement = async () => {
+    await loadData(); // Refresh data first
     const logoSetting = siteSettings.find(s => s.setting_key === 'general');
-    if (logoSetting) {
+    if (logoSetting && logoSetting.setting_value) {
       setCurrentLogo(logoSetting.setting_value.logoUrl || '');
+    } else {
+      setCurrentLogo('');
     }
     setIsLogoManagementOpen(true);
   };
 
   const updateLogo = async (newLogoUrl: string) => {
     try {
-      const generalSettings = siteSettings.find(s => s.setting_key === 'general');
-      if (generalSettings) {
-        const updatedSettings = {
+      let generalSettings = siteSettings.find(s => s.setting_key === 'general');
+      
+      let updatedSettings;
+      if (generalSettings && generalSettings.setting_value) {
+        updatedSettings = {
           ...generalSettings.setting_value,
           logoUrl: newLogoUrl,
           logoWhiteUrl: newLogoUrl
         };
-        await updateSiteSettings('general', updatedSettings);
-        setCurrentLogo(newLogoUrl);
-        
-        toast({
-          title: "Logo Updated",
-          description: "Website logo has been updated successfully.",
-        });
+      } else {
+        // Create new general settings if they don't exist
+        updatedSettings = {
+          logoUrl: newLogoUrl,
+          logoWhiteUrl: newLogoUrl,
+          siteName: "SPACE",
+          tagline: "Organizing Exhibitions & Conferences"
+        };
       }
+      
+      await updateSiteSettings('general', updatedSettings);
+      setCurrentLogo(newLogoUrl);
+      await loadData(); // Refresh data to ensure consistency
+      
+      toast({
+        title: "Logo Updated",
+        description: "Website logo has been updated successfully. Please refresh the main website to see changes.",
+      });
     } catch (error: any) {
       toast({
         title: "Update Failed",
