@@ -15,6 +15,13 @@ const Index = () => {
   // Load content from database
   useEffect(() => {
     loadContent();
+    
+    // Set up interval to refresh settings every 30 seconds
+    const interval = setInterval(() => {
+      loadContent();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const loadContent = async () => {
@@ -43,6 +50,7 @@ const Index = () => {
         settings.forEach(setting => {
           settingsMap[setting.setting_key] = setting.setting_value;
         });
+        console.log('Loaded site settings:', settingsMap); // Debug log
         setSiteSettings(settingsMap);
       }
 
@@ -165,19 +173,23 @@ const Index = () => {
           <div className="flex items-center justify-between h-20">
             {/* Logo */}
             <div className="flex items-center space-x-3">
-              {siteSettings.general?.logoUrl ? (
-                <img 
-                  src={siteSettings.general.logoUrl} 
-                  alt="SPACE Logo" 
-                  className="h-12 w-auto"
-                />
-              ) : (
-                <img 
-                  src="./images/space_logo_20260101_120021.png" 
-                  alt="SPACE Logo" 
-                  className="h-12 w-auto"
-                />
-              )}
+              {(() => {
+                console.log('Site settings:', siteSettings);
+                console.log('Logo URL:', siteSettings.general?.logoUrl);
+                return siteSettings.general?.logoUrl ? (
+                  <img 
+                    src={siteSettings.general.logoUrl} 
+                    alt="SPACE Logo" 
+                    className="h-12 w-auto"
+                  />
+                ) : (
+                  <img 
+                    src="./images/space_logo_20260101_120021.png" 
+                    alt="SPACE Logo" 
+                    className="h-12 w-auto"
+                  />
+                );
+              })()}
               <span className="text-2xl font-heading font-black uppercase tracking-wider text-foreground">
                 SPACE
               </span>

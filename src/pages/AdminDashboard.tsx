@@ -366,15 +366,21 @@ const AdminDashboard = () => {
 
   const updateSiteSettings = async (settingKey: string, newValue: any) => {
     try {
+      console.log('Updating site settings:', settingKey, newValue); // Debug log
+      
       const { error } = await supabase
         .from('site_settings_2026_01_01_12_00')
         .update({ 
-          setting_value: newValue,
-          updated_by: user?.id
+          setting_value: newValue
         })
         .eq('setting_key', settingKey);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Update error:', error); // Debug log
+        throw error;
+      }
+      
+      console.log('Settings updated successfully'); // Debug log
 
       toast({
         title: "Settings Updated",
