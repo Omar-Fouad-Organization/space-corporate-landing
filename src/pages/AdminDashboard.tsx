@@ -92,9 +92,13 @@ const AdminDashboard = () => {
 
   // Form states
   const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<'admin' | 'editor'>('editor');
   const [newUserName, setNewUserName] = useState('');
   const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false);
+  const [editingContent, setEditingContent] = useState<any>(null);
+  const [isEditContentDialogOpen, setIsEditContentDialogOpen] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   // Check authentication and load user data
   useEffect(() => {
@@ -196,10 +200,19 @@ const AdminDashboard = () => {
   };
 
   const addNewUser = async () => {
-    if (!newUserEmail || !newUserName) {
+    if (!newUserEmail || !newUserName || !newUserPassword) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all required fields.",
+        description: "Please fill in all required fields including password.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newUserPassword.length < 6) {
+      toast({
+        title: "Password Too Short",
+        description: "Password must be at least 6 characters long.",
         variant: "destructive",
       });
       return;
@@ -209,7 +222,7 @@ const AdminDashboard = () => {
       // Create auth user via admin API (this would typically be done server-side)
       const { data, error } = await supabase.auth.admin.createUser({
         email: newUserEmail,
-        password: 'TempPassword123!', // User should change this on first login
+        password: newUserPassword,
         email_confirm: true
       });
 
@@ -235,6 +248,7 @@ const AdminDashboard = () => {
 
       // Reset form and reload data
       setNewUserEmail('');
+      setNewUserPassword('');
       setNewUserName('');
       setNewUserRole('editor');
       setIsAddUserDialogOpen(false);
@@ -385,6 +399,90 @@ const AdminDashboard = () => {
     return false;
   };
 
+  // File upload function
+  const handleFileUpload = async (file: File, category: string = 'general') => {
+    if (!file) return null;
+
+    setUploadingFile(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${category}/${fileName}`;
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('space-media')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('space-media')
+        .getPublicUrl(filePath);
+
+      // Add to media_assets table
+      const { data: assetData, error: assetError } = await supabase
+        .from('media_assets_2026_01_01_12_00')
+        .insert({
+          file_name: file.name,
+          file_path: publicUrl,
+          file_type: file.type,
+          file_size: file.size,
+          category: category,
+          uploaded_by: user?.id
+        })
+        .select()
+        .single();
+
+      if (assetError) throw assetError;
+
+      toast({
+        title: "File Uploaded",
+        description: `${file.name} has been uploaded successfully.`,
+      });
+
+      await loadData();
+      return assetData;
+
+    } catch (error: any) {
+      toast({
+        title: "Upload Failed",
+        description: error.message || "Failed to upload file.",
+        variant: "destructive",
+      });
+      return null;
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  // Simple content editor
+  const openContentEditor = (section: ContentSection) => {
+    setEditingContent({
+      ...section,
+      contentString: JSON.stringify(section.content, null, 2)
+    });
+    setIsEditContentDialogOpen(true);
+  };
+
+  const saveContentChanges = async () => {
+    if (!editingContent) return;
+
+    try {
+      const parsedContent = JSON.parse(editingContent.contentString);
+      await updateContent(editingContent.section_key, parsedContent);
+      setIsEditContentDialogOpen(false);
+      setEditingContent(null);
+    } catch (error: any) {
+      toast({
+        title: "Invalid JSON",
+        description: "Please check your JSON syntax and try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -496,6 +594,15 @@ const AdminDashboard = () => {
                           value={newUserEmail}
                           onChange={(e) => setNewUserEmail(e.target.value)}
                           placeholder="Enter email address"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Password</Label>
+                        <Input
+                          type="password"
+                          value={newUserPassword}
+                          onChange={(e) => setNewUserPassword(e.target.value)}
+                          placeholder="Enter password (min 6 characters)"
                         />
                       </div>
                       <div className="space-y-2">
@@ -629,11 +736,7 @@ const AdminDashboard = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            const newContent = { ...section.content };
-                            // This would open an edit dialog in a real implementation
-                            console.log('Edit content for:', section.section_key);
-                          }}
+                          onClick={() => openContentEditor(section)}
                         >
                           <Edit className="w-4 h-4 mr-2" />
                           Edit
@@ -670,10 +773,48 @@ const AdminDashboard = () => {
           <TabsContent value="media" className="space-y-8">
             <div className="flex items-center justify-between">
               <h2 className="text-3xl font-heading font-bold">Media Management</h2>
-              <Button className="btn-corporate">
-                <Upload className="w-4 h-4 mr-2" />
-                Upload Media
-              </Button>
+              <div className="flex space-x-2">
+                <input
+                  type="file"
+                  id="media-upload"
+                  className="hidden"
+                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleFileUpload(file, 'general');
+                    }
+                  }}
+                />
+                <Button 
+                  className="btn-corporate"
+                  onClick={() => document.getElementById('media-upload')?.click()}
+                  disabled={uploadingFile}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  {uploadingFile ? 'Uploading...' : 'Upload Media'}
+                </Button>
+                <input
+                  type="file"
+                  id="logo-upload"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleFileUpload(file, 'logos');
+                    }
+                  }}
+                />
+                <Button 
+                  variant="outline"
+                  onClick={() => document.getElementById('logo-upload')?.click()}
+                  disabled={uploadingFile}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload Logo
+                </Button>
+              </div>
             </div>
 
             <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -874,6 +1015,43 @@ const AdminDashboard = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Content Editor Dialog */}
+      <Dialog open={isEditContentDialogOpen} onOpenChange={setIsEditContentDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Content: {editingContent?.section_name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Content (JSON Format)</Label>
+              <Textarea
+                value={editingContent?.contentString || ''}
+                onChange={(e) => setEditingContent({
+                  ...editingContent,
+                  contentString: e.target.value
+                })}
+                rows={20}
+                className="font-mono text-sm"
+                placeholder="Enter content in JSON format..."
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <p><strong>Tip:</strong> Edit the JSON content above. Make sure to maintain valid JSON syntax.</p>
+              <p><strong>Common fields:</strong> title, description, subtitle, items (for lists), etc.</p>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setIsEditContentDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={saveContentChanges} className="btn-corporate">
+                <Save className="w-4 h-4 mr-2" />
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
