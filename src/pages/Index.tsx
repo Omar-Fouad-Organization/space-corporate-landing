@@ -172,7 +172,7 @@ const Index = () => {
         <div className="container-corporate">
           <div className="flex items-center justify-between h-20">
             {/* Logo */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center">
               {(() => {
                 console.log('Site settings:', siteSettings);
                 console.log('Logo URL:', siteSettings.general?.logoUrl);
@@ -180,19 +180,16 @@ const Index = () => {
                   <img 
                     src={siteSettings.general.logoUrl} 
                     alt="SPACE Logo" 
-                    className="h-12 w-auto"
+                    className="h-24 w-auto"
                   />
                 ) : (
                   <img 
                     src="./images/space_logo_20260101_120021.png" 
                     alt="SPACE Logo" 
-                    className="h-12 w-auto"
+                    className="h-24 w-auto"
                   />
                 );
               })()}
-              <span className="text-2xl font-heading font-black uppercase tracking-wider text-foreground">
-                SPACE
-              </span>
             </div>
 
             {/* Desktop Navigation */}
@@ -494,23 +491,20 @@ const Index = () => {
         <div className="container-corporate">
           <div className="grid md:grid-cols-3 gap-8">
             <div className="space-y-4">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center">
                 {siteSettings.general?.logoUrl ? (
                   <img 
                     src={siteSettings.general.logoUrl} 
                     alt="SPACE Logo" 
-                    className="h-8 w-auto filter brightness-0 invert"
+                    className="h-16 w-auto filter brightness-0 invert"
                   />
                 ) : (
                   <img 
                     src="./images/space_logo_20260101_120021.png" 
                     alt="SPACE Logo" 
-                    className="h-8 w-auto filter brightness-0 invert"
+                    className="h-16 w-auto filter brightness-0 invert"
                   />
                 )}
-                <span className="text-xl font-heading font-black uppercase tracking-wider">
-                  SPACE
-                </span>
               </div>
               <p className="text-secondary-foreground/80">
                 Creating exceptional experiences through precision planning and flawless execution.
