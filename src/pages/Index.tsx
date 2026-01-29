@@ -2,7 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, Calendar, Users, MapPin, Award, ArrowRight, Menu, X } from 'lucide-react';
+import { 
+  ExternalLink, 
+  Calendar, 
+  Users, 
+  MapPin, 
+  Award, 
+  ArrowRight, 
+  Menu, 
+  X,
+  Building2,
+  Target,
+  Handshake,
+  Ruler,
+  Zap
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
@@ -107,27 +121,32 @@ const Index = () => {
     {
       title: "Exhibition Organizing",
       description: "End-to-end exhibition planning and execution with precision and scale.",
-      icon: "🏢"
+      icon: Building2,
+      color: "text-blue-600"
     },
     {
       title: "Conference Management",
       description: "Strategic conference planning from concept to completion.",
-      icon: "🎯"
+      icon: Target,
+      color: "text-emerald-600"
     },
     {
       title: "Sponsorship Planning",
       description: "Comprehensive sponsorship strategies that deliver measurable results.",
-      icon: "🤝"
+      icon: Handshake,
+      color: "text-purple-600"
     },
     {
       title: "Venue & Layout Design",
       description: "Innovative space design optimized for engagement and flow.",
-      icon: "📐"
+      icon: Ruler,
+      color: "text-orange-600"
     },
     {
       title: "On-ground Execution",
       description: "Flawless event execution with dedicated project management.",
-      icon: "⚡"
+      icon: Zap,
+      color: "text-red-600"
     }
   ];
 
@@ -342,7 +361,11 @@ const Index = () => {
             {services.map((service, index) => (
               <Card key={index} className="card-corporate group">
                 <CardContent className="p-8 text-center space-y-4">
-                  <div className="text-4xl mb-4">{service.icon}</div>
+                  <div className="mb-6 flex justify-center">
+                    <div className={`p-4 rounded-2xl bg-gradient-to-br from-white to-gray-50 shadow-lg border border-gray-100 group-hover:shadow-xl transition-all duration-300 ${service.color}`}>
+                      <service.icon className="w-8 h-8" strokeWidth={1.5} />
+                    </div>
+                  </div>
                   <h3 className="text-xl font-heading font-bold uppercase tracking-wide text-foreground">
                     {service.title}
                   </h3>
