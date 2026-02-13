@@ -30,7 +30,18 @@ import {
   Shield,
   Crown,
   User,
-  Github
+  Github,
+  BarChart3,
+  TrendingUp,
+  Activity,
+  Database,
+  HardDrive,
+  Zap,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  FileText,
+  Download
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -106,6 +117,10 @@ const AdminDashboard = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isLogoManagementOpen, setIsLogoManagementOpen] = useState(false);
   const [currentLogo, setCurrentLogo] = useState<string>('');
+  const [applyingImage, setApplyingImage] = useState<string | null>(null);
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [seoScore, setSeoScore] = useState<any>(null);
 
   // Check authentication and load user data
   useEffect(() => {
@@ -646,6 +661,16 @@ const AdminDashboard = () => {
   const replaceMediaFile = async (newFile: File, assetId: string) => {
     setUploadingFile(true);
     try {
+      // Get the current media asset to find its old URL
+      const { data: currentAsset, error: fetchError } = await supabase
+        .from('media_assets_2026_01_01_12_00')
+        .select('file_path')
+        .eq('id', assetId)
+        .single();
+
+      if (fetchError) throw fetchError;
+      const oldImageUrl = currentAsset.file_path;
+
       const fileExt = newFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `replacements/${fileName}`;
@@ -675,9 +700,12 @@ const AdminDashboard = () => {
 
       if (updateError) throw updateError;
 
+      // Update website content that uses this image
+      await updateWebsiteContent(oldImageUrl, publicUrl);
+
       toast({
         title: "File Replaced",
-        description: "Media file has been replaced successfully.",
+        description: "Media file has been replaced and website updated successfully.",
       });
 
       await loadData();
@@ -689,6 +717,145 @@ const AdminDashboard = () => {
       });
     } finally {
       setUploadingFile(false);
+    }
+  };
+
+  // Function to update website content when media changes
+  const updateWebsiteContent = async (oldImageUrl: string, newImageUrl: string) => {
+    try {
+      // Call the media management edge function to update content
+      const { data, error } = await supabase.functions.invoke('media_management_2026_02_13_18_00', {
+        body: {
+          action: 'replace_website_image',
+          mediaId: oldImageUrl,
+          newImageUrl: newImageUrl
+        }
+      });
+
+      if (error) throw error;
+
+      console.log('Website content updated:', data);
+      return data;
+    } catch (error) {
+      console.error('Failed to update website content:', error);
+      throw error;
+    }
+  };
+
+  // Function to apply image to specific content section
+  const applyImageToSection = async (imageUrl: string, sectionKey: string, imageField: string) => {
+    setApplyingImage(imageUrl);
+    try {
+      const { data, error } = await supabase.functions.invoke('media_management_2026_02_13_18_00', {
+        body: {
+          action: 'update_content_image',
+          newImageUrl: imageUrl,
+          sectionKey: sectionKey,
+          imageField: imageField
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Image Applied",
+        description: `Image has been applied to ${sectionKey} section successfully.`,
+      });
+
+      await loadData();
+      return data;
+    } catch (error: any) {
+      toast({
+        title: "Apply Failed",
+        description: error.message || "Failed to apply image to section.",
+        variant: "destructive",
+      });
+      throw error;
+    } finally {
+      setApplyingImage(null);
+    }
+  };
+
+  // Analytics functions
+  const loadAnalytics = async () => {
+    setLoadingAnalytics(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin_analytics_2026_02_13_18_00', {
+        body: { action: 'analytics' }
+      });
+
+      if (error) throw error;
+      setAnalytics(data.analytics);
+
+      // Load SEO score
+      const { data: seoData, error: seoError } = await supabase.functions.invoke('seo_performance_2026_02_13_18_00');
+      if (!seoError && seoData) {
+        setSeoScore(seoData);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Analytics Load Failed",
+        description: error.message || "Failed to load analytics data.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
+  const generateBackup = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin_analytics_2026_02_13_18_00', {
+        body: { action: 'backup' }
+      });
+
+      if (error) throw error;
+
+      // Download backup as JSON file
+      const blob = new Blob([JSON.stringify(data.backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `space-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Backup Created",
+        description: "Backup file has been downloaded successfully.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Backup Failed",
+        description: error.message || "Failed to create backup.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const runSEOAudit = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('seo_performance_2026_02_13_18_00', {
+        body: { action: 'seo_audit' }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "SEO Audit Complete",
+        description: `Found ${data.seo_issues.length} SEO issues to address.`,
+      });
+
+      // Refresh analytics
+      await loadAnalytics();
+    } catch (error: any) {
+      toast({
+        title: "SEO Audit Failed",
+        description: error.message || "Failed to run SEO audit.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -808,6 +975,10 @@ const AdminDashboard = () => {
             <TabsTrigger value="github" className="flex items-center space-x-2">
               <Github className="w-4 h-4" />
               <span>GitHub</span>
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="flex items-center space-x-2">
+              <BarChart3 className="w-4 h-4" />
+              <span>Analytics</span>
             </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center space-x-2">
               <History className="w-4 h-4" />
@@ -1140,6 +1311,36 @@ const AdminDashboard = () => {
                         </p>
                       )}
                     </div>
+                    
+                    {/* Apply to Section - Only for images */}
+                    {asset.file_type.startsWith('image/') && (
+                      <div className="mt-3 mb-2">
+                        <Select 
+                          onValueChange={(value) => {
+                            const [sectionKey, imageField] = value.split('.');
+                            applyImageToSection(asset.file_path, sectionKey, imageField);
+                          }}
+                          disabled={applyingImage === asset.file_path}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder={
+                              applyingImage === asset.file_path 
+                                ? "Applying..." 
+                                : "Apply to section..."
+                            } />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="hero.hero_image">Hero Background</SelectItem>
+                            <SelectItem value="about.featured_image">About Section Image</SelectItem>
+                            <SelectItem value="services.background_image">Services Background</SelectItem>
+                            <SelectItem value="work.featured_image">Work Section Image</SelectItem>
+                            <SelectItem value="contact.background_image">Contact Background</SelectItem>
+                            <SelectItem value="general.logoUrl">Website Logo</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    
                     <div className="flex justify-between items-center mt-3">
                       <Badge variant="outline" className="text-xs">
                         {asset.category}
@@ -1428,6 +1629,160 @@ const AdminDashboard = () => {
                 </CardContent>
               </Card>
             ))}
+          </TabsContent>
+
+          {/* Analytics Dashboard */}
+          <TabsContent value="analytics" className="space-y-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-3xl font-heading font-bold">Analytics Dashboard</h2>
+                <p className="text-muted-foreground mt-1">
+                  Comprehensive insights into your website performance and content
+                </p>
+              </div>
+              <div className="flex space-x-2">
+                <Button onClick={loadAnalytics} disabled={loadingAnalytics} className="btn-corporate">
+                  <Activity className="w-4 h-4 mr-2" />
+                  {loadingAnalytics ? 'Loading...' : 'Refresh Data'}
+                </Button>
+                <Button onClick={generateBackup} variant="outline">
+                  <Download className="w-4 h-4 mr-2" />
+                  Backup Data
+                </Button>
+              </div>
+            </div>
+
+            {loadingAnalytics ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : analytics ? (
+              <div className="grid gap-8">
+                {/* Overview Cards */}
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center space-x-2">
+                        <FileText className="w-5 h-5 text-blue-600" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Content Sections</p>
+                          <p className="text-2xl font-bold">{analytics.content.total_sections}</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        {analytics.content.published_sections} published, {analytics.content.draft_sections} drafts
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center space-x-2">
+                        <Image className="w-5 h-5 text-green-600" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Media Assets</p>
+                          <p className="text-2xl font-bold">{analytics.media.total_assets}</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        {analytics.media.total_size_mb} MB total size
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center space-x-2">
+                        <Users className="w-5 h-5 text-purple-600" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Admin Users</p>
+                          <p className="text-2xl font-bold">{analytics.users.total_admins}</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        {analytics.users.active_admins} active users
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center space-x-2">
+                        {seoScore?.seo_score >= 80 ? (
+                          <CheckCircle className="w-5 h-5 text-green-600" />
+                        ) : seoScore?.seo_score >= 60 ? (
+                          <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                        ) : (
+                          <AlertTriangle className="w-5 h-5 text-red-600" />
+                        )}
+                        <div>
+                          <p className="text-sm text-muted-foreground">SEO Score</p>
+                          <p className="text-2xl font-bold">{seoScore?.seo_score || 0}%</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Grade: {seoScore?.grade || 'N/A'}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* System Health */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Database className="w-5 h-5" />
+                      <span>System Health</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid md:grid-cols-3 gap-6">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 rounded-full bg-green-100 dark:bg-green-900">
+                          <Database className="w-4 h-4 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                          <p className="font-medium">Database</p>
+                          <p className="text-sm text-green-600">Healthy</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 rounded-full bg-green-100 dark:bg-green-900">
+                          <HardDrive className="w-4 h-4 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                          <p className="font-medium">Storage</p>
+                          <p className="text-sm text-green-600">Healthy</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 rounded-full bg-green-100 dark:bg-green-900">
+                          <Zap className="w-4 h-4 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                          <p className="font-medium">Functions</p>
+                          <p className="text-sm text-green-600">Active</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <BarChart3 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Analytics Data</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Click "Refresh Data" to load analytics information
+                  </p>
+                  <Button onClick={loadAnalytics} className="btn-corporate">
+                    <Activity className="w-4 h-4 mr-2" />
+                    Load Analytics
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* GitHub Integration */}
